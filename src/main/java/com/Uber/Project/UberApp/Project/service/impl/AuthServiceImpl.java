@@ -9,12 +9,16 @@ import com.Uber.Project.UberApp.Project.entity.enums.Role;
 import com.Uber.Project.UberApp.Project.exception.ResourceNotFoundException;
 import com.Uber.Project.UberApp.Project.exception.RuntimeConflictException;
 import com.Uber.Project.UberApp.Project.repository.UserRepository;
+import com.Uber.Project.UberApp.Project.security.JWTService;
 import com.Uber.Project.UberApp.Project.service.AuthService;
 import com.Uber.Project.UberApp.Project.service.DriverService;
 import com.Uber.Project.UberApp.Project.service.RiderService;
 import com.Uber.Project.UberApp.Project.service.WalletService;
 import lombok.RequiredArgsConstructor;
 import org.modelmapper.ModelMapper;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,11 +37,22 @@ public class AuthServiceImpl implements AuthService {
     private final WalletService walletService;
     private final DriverService driverService;
     private final PasswordEncoder passwordEncoder;
+    private final AuthenticationManager authenticationManager;
+    private final JWTService jwtService;
 
     @Override
     public String[] login(String email, String password) {
 
         String tokens[] = new String[2];
+        Authentication authentication = authenticationManager.authenticate(
+                new UsernamePasswordAuthenticationToken(email,password));
+
+        User user = (User) authentication.getPrincipal();
+        String accessToken = jwtService.getAccessToken(user);
+        String refreshToken = jwtService.getRefreshToken(user);
+
+        tokens[0]=accessToken;
+        tokens[1]=refreshToken;
 
         return tokens;
     }
@@ -79,6 +94,16 @@ public class AuthServiceImpl implements AuthService {
         userRepository.save(user);
         Driver savedDriver = driverService.createNewDriver(createDriver);
         return modelMapper.map(savedDriver, DriverDto.class);
+    }
+
+    public String refreshToken(String token)
+    {
+        Long userId= jwtService.getUserIdFromToken(token);
+
+        User user = userRepository.findById(userId).orElseThrow(()-> new ResourceNotFoundException(
+                "No user found with id "+userId
+        ));
+        return jwtService.getAccessToken(user);
     }
 }
 
